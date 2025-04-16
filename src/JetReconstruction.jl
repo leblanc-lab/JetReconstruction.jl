@@ -15,9 +15,12 @@ examples in this package for more information.
 """
 module JetReconstruction
 
+
 using LorentzVectorHEP
 using MuladdMacro
 using StructArrays
+using Plots 
+
 
 # Import from LorentzVectorHEP methods for those 4-vector types
 pt2(p::LorentzVector) = LorentzVectorHEP.pt2(p)
@@ -40,7 +43,7 @@ energy(p::LorentzVectorCyl) = LorentzVectorHEP.energy(p)
 include("Pseudojet.jl")
 include("EEJet.jl")
 include("JetUtils.jl")
-export PseudoJet, EEJet, pt_fraction, kt_scale, lorentzvector, lorentzvector_cyl
+export PseudoJet, EEJet, pt_fraction, kt_scale, lorentzvector, lorentzvector_cyl, _set_rap_phi, pt2, phi, rapidity 
 
 # Jet reconstruction strategies and algorithms (enums!)
 include("AlgorithmStrategyEnums.jl")
@@ -66,6 +69,18 @@ export tiled_jet_reconstruct
 ## E+E- algorithms
 include("EEAlgorithm.jl")
 export ee_genkt_algorithm
+
+## Tiling Base
+include("TilingBase.jl")
+export TilingBase
+
+## Rectangular grid
+include("RectangularGrid.jl")
+export RectangularGrid
+
+## SoftKiller
+include("SoftKiller.jl")
+export SoftKiller, apply, select_ABS_RAP_max, push_data, plot_set_up
 
 ## Generic algorithm, which can switch strategy dynamically
 include("GenericAlgo.jl")
