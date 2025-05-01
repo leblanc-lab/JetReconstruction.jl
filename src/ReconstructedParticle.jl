@@ -5,8 +5,9 @@ using LorentzVectorHEP
 using EDM4hep
 using StaticArrays
 using LinearAlgebra
+using StructArrays: StructVector
 
-const JetConstituents = Vector{EDM4hep.ReconstructedParticle}
+const JetConstituents = StructVector{EDM4hep.ReconstructedParticle}
 
 """
     get_p(inputs::JetConstituents) -> Vector{Float64}
@@ -327,19 +328,43 @@ end
     sel_p(min_p::Float64, max_p::Float64=1e10) -> Function
 
 Select particles with momentum between min_p and max_p.
+Returns a JetConstituents (StructVector) object.
 """
-function sel_p(min_p::Float64, max_p::Float64=1e10)
+function sel_p(min_p::Float64=0.0, max_p::Float64=1e10)
     return function(inputs::JetConstituents)
-        result = JetConstituents()
-        for p in inputs
+        # Collect indices of particles that pass the momentum cut
+        selected_indices = Int[]
+        
+        for (i, p) in enumerate(inputs)
             p_mag = sqrt(p.momentum.x^2 + p.momentum.y^2 + p.momentum.z^2)
             if min_p < p_mag < max_p
-                push!(result, p)
+                push!(selected_indices, i)
             end
         end
-        return result
+        
+        # Return a subset of the original StructVector
+        if !isempty(selected_indices)
+            return inputs[selected_indices]
+        else
+            # Create an empty JetConstituents with the same structure
+            return StructVector{EDM4hep.ReconstructedParticle}(similar.(fieldarrays(inputs), 0))
+            # return StructVector{EDM4hep.ReconstructedParticle}(inputs,0)
+        end
     end
 end
+
+# function sel_p(min_p::Float64, max_p::Float64=1e10)
+#     return function(inputs::JetConstituents)
+#         result = JetConstituents()
+#         for p in inputs
+#             p_mag = sqrt(p.momentum.x^2 + p.momentum.y^2 + p.momentum.z^2)
+#             if min_p < p_mag < max_p
+#                 push!(result, p)
+#             end
+#         end
+#         return result
+#     end
+# end
 
 """
     sel_charge(charge::Int, abs_charge::Bool=false) -> Function
@@ -403,7 +428,32 @@ function sel_absType(type::Int)
 end
 
 function sel_tag()
+    ### TODO: Implement this function
 end
 
+"""
+    get(indices::StructVector{ObjectID}, particles::JetConstituents) -> JetConstituents
+
+Get reconstructed particles referenced by ObjectIDs.
+"""
+function get(indices::StructVector{ObjectID}, particles::JetConstituents)
+    # Collect valid indices from ObjectIDs
+    valid_indices = Int[]
+    
+    for i in indices
+        index = i.index
+        if index > 0 && index <= length(particles)
+            push!(valid_indices, index)
+        end
+    end
+    
+    # If we have valid indices, create a subset of the original StructVector
+    if !isempty(valid_indices)
+        return particles[valid_indices]
+    else
+        # Create an empty JetConstituents with the same structure
+        return StructVector{EDM4hep.ReconstructedParticle}(similar.(fieldarrays(particles), 0))
+    end
+end
 
 end # module

@@ -11,20 +11,23 @@ include("ReconstructedParticle.jl")
 include("ReconstructedParticle2Track.jl")
 
 # Define type aliases for clarity
-const FCCAnalysesJetConstituents = StructVector{EDM4hep.ReconstructedParticle}
-const FCCAnalysesJetConstituentsData = Vector{Float32}
+const JetConstituents = StructVector{EDM4hep.ReconstructedParticle}
+const JetConstituentsData = Vector{Float32}
 
 """
     build_constituents(jets::Vector{EDM4hep.ReconstructedParticle}, 
-                        rps::Vector{EDM4hep.ReconstructedParticle}) -> Vector{FCCAnalysesJetConstituents}
+                        rps::Vector{EDM4hep.ReconstructedParticle}) -> Vector{JetConstituents}
 
 Build the collection of constituents (mapping jet -> reconstructed particles) for all jets in event.
+
+# Returns
+A vector of JetConstituents, each containing the constituents for a specific jet.
 """
-function build_constituents(jets::FCCAnalysesJetConstituents, 
+function build_constituents(jets::JetConstituents, 
                             rps::Vector{EDM4hep.ReconstructedParticle})
-    jcs = Vector{FCCAnalysesJetConstituents}()
+    jcs = Vector{JetConstituents}()
     for jet in jets
-        constituents = FCCAnalysesJetConstituents()
+        constituents = JetConstituents()
         for i in jet.particles_begin:jet.particles_end-1
             push!(constituents, rps[i+1])  # Julia uses 1-based indexing
         end
@@ -34,14 +37,17 @@ function build_constituents(jets::FCCAnalysesJetConstituents,
 end
 
 """
-    build_constituents_cluster(rps::FCCAnalysesJetConstituents, 
-                            indices::Vector{Vector{Int}}) -> Vector{FCCAnalysesJetConstituents}
+    build_constituents_cluster(rps::JetConstituents, 
+                            indices::Vector{Vector{Int}}) -> Vector{JetConstituents}
 
 Build the collection of constituents using cluster indices.
+
+# Returns
+A vector of JetConstituents, each containing the constituents for a specific cluster.
 """
-function build_constituents_cluster(rps::FCCAnalysesJetConstituents, 
+function build_constituents_cluster(rps::JetConstituents, 
                                 indices::Vector{Vector{Int}})
-    jcs = Vector{FCCAnalysesJetConstituents}()
+    jcs = Vector{JetConstituents}()
     for jet_indices in indices
         # Create a subset of the original StructVector
         # This requires valid indices in the Julia range (1-based)
@@ -66,29 +72,105 @@ function build_constituents_cluster(rps::FCCAnalysesJetConstituents,
 end
 
 """
-    get_jet_constituents(csts::Vector{FCCAnalysesJetConstituents}, jet::Int) -> FCCAnalysesJetConstituents
+    get_jet_constituents(csts::Vector{JetConstituents}, jet::Int) -> JetConstituents
 
 Retrieve the constituents of an indexed jet in the event.
+
+# Returns
+The constituents of the specified jet, or an empty collection if the jet index is invalid.
 """
-function get_jet_constituents(csts::Vector{FCCAnalysesJetConstituents}, jet::Int)
+function get_jet_constituents(csts::Vector{JetConstituents}, jet::Int)
     if jet < 0
-        return FCCAnalysesJetConstituents()
+        return JetConstituents()
     end
     return csts[jet+1]  # Julia uses 1-based indexing
 end
 
-struct TVector2
+
+"""
+    Vector2(x::Float64, y::Float64) -> Vector2
+
+Create a 2D vector with x and y components.
+
+Fields: 
+- `X`: The x component of the vector.
+- `Y`: The y component of the vector.
+"""
+struct Vector2
     X::Float64
     Y::Float64
 end
 
 """
-    get_constituents(csts::Vector{FCCAnalysesJetConstituents}, jets::Vector{Int}) -> Vector{FCCAnalysesJetConstituents}
+    Vector3(x::Float64, y::Float64, z::Float64) -> Vector3
+
+Create a 3D vector with x, y, and z components.
+
+Fields:
+- `X`: The x component of the vector.
+- `Y`: The y component of the vector.
+- `Z`: The z component of the vector.
+"""
+struct Vector3
+    X::Float64
+    Y::Float64
+    Z::Float64
+end
+
+function v3_cross(v::Vector3, w::Vector3)
+    return Vector3(
+        v.Y*w.Z - v.Z*w.Y,
+        v.Z*w.X - v.X*w.Z,
+        v.X*w.Y - v.Y*w.X,
+    )
+end
+
+"""
+    v3_dot(v::Vector3, w::Vector3) -> Float64
+
+Calculate the dot product of two 3D vectors.
+
+# Returns
+The dot product of the two vectors.
+"""
+function v3_dot(v::Vector3, w::Vector3)
+    return v.X*w.X + v.Y*w.Y + v.Z*w.Z
+end
+
+
+"""
+    v3_norm(v::Vector3) -> Float64
+
+Calculate the norm (magnitude) of a 3D vector.
+
+# Returns
+The magnitude of the vector.
+"""
+function v3_norm(v::Vector3)
+    return sqrt(v.X^2 + v.Y^2 + v.Z^2)
+end
+
+
+"""
+    v3_unit(v::Vector3) -> Vector3
+
+Calculate the unit vector of a 3D vector.
+
+# Returns
+The unit vector in the same direction as the input vector.
+"""
+function v3_unit(v::Vector3)
+    n = v3_norm(v)
+    return Vector3(v.X/n, v.Y/n, v.Z/n)
+end
+
+"""
+    get_constituents(csts::Vector{JetConstituents}, jets::Vector{Int}) -> Vector{JetConstituents}
 
 Retrieve the constituents of a collection of indexed jets in the event.
 """
-function get_constituents(csts::Vector{FCCAnalysesJetConstituents}, jets::Vector{Int})
-    jcs = Vector{FCCAnalysesJetConstituents}()
+function get_constituents(csts::Vector{JetConstituents}, jets::Vector{Int})
+    jcs = Vector{JetConstituents}()
     for i in eachindex(jets)
         if jets[i] >= 0
             push!(jcs, csts[jets[i]+1])  # Julia uses 1-based indexing
@@ -97,48 +179,13 @@ function get_constituents(csts::Vector{FCCAnalysesJetConstituents}, jets::Vector
     return jcs
 end
 
-# Helper function to apply a method to each constituent collection
-function cast_constituent(jcs::Vector{FCCAnalysesJetConstituents}, meth::Function)
-    result = Vector{FCCAnalysesJetConstituentsData}()
-    for jc in jcs
-        push!(result, convert.(Float32, meth(jc)))
-    end
-    return result
-end
-
-# Helper function to apply a 2-arg method to each constituent collection
-function cast_constituent_2(jcs::Vector{FCCAnalysesJetConstituents}, coll, meth::Function)
-    result = Vector{FCCAnalysesJetConstituentsData}()
-    for jc in jcs
-        push!(result, convert.(Float32, meth(jc, coll)))
-    end
-    return result
-end
-
-# Helper function to apply a 3-arg method to each constituent collection
-function cast_constituent_3(jcs::Vector{FCCAnalysesJetConstituents}, coll1, coll2, meth::Function)
-    result = Vector{FCCAnalysesJetConstituentsData}()
-    for jc in jcs
-        push!(result, convert.(Float32, meth(jc, coll1, coll2)))
-    end
-    return result
-end
-
-# Helper function to apply a 4-arg method to each constituent collection
-function cast_constituent_4(jcs::Vector{FCCAnalysesJetConstituents}, coll1, coll2, coll3, meth::Function)
-    result = Vector{FCCAnalysesJetConstituentsData}()
-    for jc in jcs
-        push!(result, convert.(Float32, meth(jc, coll1, coll2, coll3)))
-    end
-    return result
-end
-
 """
     get_Bz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
-            tracks::StructVector{EDM4hep.TrackState}) -> Vector{Vector{Float32}}
+            tracks::StructVector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Calculate the magnetic field Bz for each particle based on track curvature and momentum.
-Returns a vector of vectors of Bz values (one vector per jet, one value per constituent).
+# Returns 
+A vector of vectors of Bz values (one vector per jet, one value per constituent).
 """
 function get_Bz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                 tracks::StructVector{EDM4hep.TrackState})
@@ -146,10 +193,10 @@ function get_Bz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
     c_light = 2.99792458e8  # speed of light in m/s
     a = c_light * 1e3 * 1e-15  # conversion factor for omega [1/mm]
     
-    result = Vector{Vector{Float32}}()
+    result = Vector{JetConstituentsData}()
     
     for constituents in jcs
-        bz_values = Vector{Float32}()
+        bz_values = JetConstituentsData()
         
         for p in constituents
             # Check if particle has associated tracks through the relation
@@ -180,14 +227,14 @@ function get_Bz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
 end
 
 """
-    get_pt(jcs::Vector{FCCAnalysesJetConstituents}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_pt(jcs::Vector{JetConstituents}) -> Vector{JetConstituentsData}
 
 Get the transverse momentum of each particle in each jet.
 """
-function get_pt(jcs::Vector{FCCAnalysesJetConstituents})
-    result = Vector{FCCAnalysesJetConstituentsData}()
+function get_pt(jcs::Vector{JetConstituents})
+    result = Vector{JetConstituentsData}()
     for jet_constituents in jcs
-        pt_values = FCCAnalysesJetConstituentsData()
+        pt_values = JetConstituentsData()
         for p in jet_constituents
             pt = sqrt(p.momentum.x^2 + p.momentum.y^2)
             push!(pt_values, pt)
@@ -197,63 +244,15 @@ function get_pt(jcs::Vector{FCCAnalysesJetConstituents})
     return result
 end
 
-function estimate_Bz(particles::StructVector{EDM4hep.ReconstructedParticle},
-    tracks::StructVector{EDM4hep.TrackState})
-    # Constants
-    c_light = 2.99792458e8  # Speed of light in m/s
-    a = c_light * 1e3 * 1e-15  # Conversion factor for omega [1/mm]
-    # Default value
-    Bz_value = -9.0f0
-    
-    # Helper function to safely access tracks
-    function get_track_idx(particle)
-        # Since EDM4hep.jl doesn't have tracks_begin, we need to check if the track relation exists
-        if isdefined(particle, :tracks)
-            track_indices = try
-                collect(particle.tracks)  # Try to collect indices from the relation
-            catch
-                Int[]  # Return empty array if relation can't be accessed
-            end
-            
-            return isempty(track_indices) ? -1 : track_indices[1]
-        else
-            return -1
-        end
-    end
-    
-    # Iterate through particles to find one with a valid track
-    for p in particles
-        if p.charge != 0.0  # Only charged particles have tracks
-            track_idx = get_track_idx(p)
-            
-            if track_idx > 0 && track_idx <= length(tracks)
-                # Calculate transverse momentum
-                pt = sqrt(p.momentum.x^2 + p.momentum.y^2)
-                
-                # Get charge sign
-                charge_sign = p.charge > 0.0 ? 1.0 : -1.0
-                
-                # Calculate Bz using the same formula as the C++ version
-                Bz_value = tracks[track_idx].omega / a * pt * charge_sign
-                
-                # In the C++ version, we use the last valid calculation
-                # So we don't break here, allowing the loop to continue
-            end
-        end
-    end
-    
-    return Bz_value
-end
-
 """
-    get_p(jcs::Vector{FCCAnalysesJetConstituents}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_p(jcs::Vector{JetConstituents}) -> Vector{JetConstituentsData}
 
 Get the momentum magnitude of each particle in each jet.
 """
-function get_p(jcs::Vector{FCCAnalysesJetConstituents})
-    result = Vector{FCCAnalysesJetConstituentsData}()
+function get_p(jcs::Vector{JetConstituents})
+    result = Vector{JetConstituentsData}()
     for jet_constituents in jcs
-        p_values = FCCAnalysesJetConstituentsData()
+        p_values = JetConstituentsData()
         for p in jet_constituents
             momentum = sqrt(p.momentum.x^2 + p.momentum.y^2 + p.momentum.z^2)
             push!(p_values, momentum)
@@ -264,14 +263,14 @@ function get_p(jcs::Vector{FCCAnalysesJetConstituents})
 end
 
 """
-    get_e(jcs::Vector{FCCAnalysesJetConstituents}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_e(jcs::Vector{JetConstituents}) -> Vector{JetConstituentsData}
 
 Get the energy of each particle in each jet.
 """
-function get_e(jcs::Vector{FCCAnalysesJetConstituents})
-    result = Vector{FCCAnalysesJetConstituentsData}()
+function get_e(jcs::Vector{JetConstituents})
+    result = Vector{JetConstituentsData}()
     for jet_constituents in jcs
-        e_values = FCCAnalysesJetConstituentsData()
+        e_values = JetConstituentsData()
         for p in jet_constituents
             push!(e_values, p.energy)
         end
@@ -281,14 +280,14 @@ function get_e(jcs::Vector{FCCAnalysesJetConstituents})
 end
 
 """
-    get_theta(jcs::Vector{FCCAnalysesJetConstituents}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_theta(jcs::Vector{JetConstituents}) -> Vector{JetConstituentsData}
 
 Get the polar angle of each particle in each jet.
 """
-function get_theta(jcs::Vector{FCCAnalysesJetConstituents})
-    result = Vector{FCCAnalysesJetConstituentsData}()
+function get_theta(jcs::Vector{JetConstituents})
+    result = Vector{JetConstituentsData}()
     for jet_constituents in jcs
-        theta_values = FCCAnalysesJetConstituentsData()
+        theta_values = JetConstituentsData()
         for p in jet_constituents
             # Calculate theta from momentum components
             p_mag = sqrt(p.momentum.x^2 + p.momentum.y^2 + p.momentum.z^2)
@@ -305,14 +304,14 @@ function get_theta(jcs::Vector{FCCAnalysesJetConstituents})
 end
 
 """
-    get_phi(jcs::Vector{FCCAnalysesJetConstituents}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_phi(jcs::Vector{JetConstituents}) -> Vector{JetConstituentsData}
 
 Get the azimuthal angle of each particle in each jet.
 """
-function get_phi(jcs::Vector{FCCAnalysesJetConstituents})
-    result = Vector{FCCAnalysesJetConstituentsData}()
+function get_phi(jcs::Vector{JetConstituents})
+    result = Vector{JetConstituentsData}()
     for jet_constituents in jcs
-        phi_values = FCCAnalysesJetConstituentsData()
+        phi_values = JetConstituentsData()
         for p in jet_constituents
             phi = atan(p.momentum.y, p.momentum.x)
             push!(phi_values, phi)
@@ -323,14 +322,14 @@ function get_phi(jcs::Vector{FCCAnalysesJetConstituents})
 end
 
 """
-    get_charge(jcs::Vector{FCCAnalysesJetConstituents}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_charge(jcs::Vector{JetConstituents}) -> Vector{JetConstituentsData}
 
 Get the charge of each particle in each jet.
 """
-function get_charge(jcs::Vector{FCCAnalysesJetConstituents})
-    result = Vector{FCCAnalysesJetConstituentsData}()
+function get_charge(jcs::Vector{JetConstituents})
+    result = Vector{JetConstituentsData}()
     for jet_constituents in jcs
-        charge_values = FCCAnalysesJetConstituentsData()
+        charge_values = JetConstituentsData()
         for p in jet_constituents
             push!(charge_values, p.charge)
         end
@@ -340,16 +339,19 @@ function get_charge(jcs::Vector{FCCAnalysesJetConstituents})
 end
 
 """
-    get_type(jcs::Vector{FCCAnalysesJetConstituents}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_type(jcs::Vector{JetConstituents}) -> Vector{JetConstituentsData}
 
 Get the PDG type of each particle in each jet.
+
+# Returns
+A vector of vectors of particle types (PDG codes/Particle IDs)
 """
-function get_type(jcs::Vector{FCCAnalysesJetConstituents})
-    result = Vector{FCCAnalysesJetConstituentsData}()
+function get_type(jcs::Vector{JetConstituents})
+    result = Vector{JetConstituentsData}()
     for jet_constituents in jcs
-        type_values = FCCAnalysesJetConstituentsData()
+        type_values = JetConstituentsData()
         for p in jet_constituents
-            push!(type_values, Float32(p.PDG))
+            push!(type_values, Float32(p.particleIDs))
         end
         push!(result, type_values)
     end
@@ -359,46 +361,35 @@ end
 """
     get_phi0(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
             tracks::StructVector{EDM4hep.TrackState}, 
-            V::LorentzVector, Bz::Float64) -> Vector{Vector{Float32}}
+            V::LorentzVector, Bz::Float64) -> Vector{JetConstituentsData}
 
 Calculate the phi angle at the point of closest approach for each particle relative to vertex V.
 This is a Julia implementation of the C++ function XPtoPar_phi.
 
-Parameters:
+# Arguments
 - jcs: Vector of jet constituents (each element contains particles for one jet)
 - tracks: StructVector of TrackState objects
 - V: LorentzVector representing the primary vertex
 - Bz: The magnetic field in Tesla
 
-Returns:
-- Vector of vectors of phi values (one vector per jet)
+# Returns
+Vector of vectors of phi values (one vector per jet)
 """
 function get_phi0(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                 tracks::StructVector{EDM4hep.TrackState}, 
                 V::LorentzVector, Bz::Float64)
+
+    cSpeed = 2.99792458e8 * 1.0e-9 
     
-    # Constants
-    cSpeed = 2.99792458e8 * 1.0e-9  # Speed of light in m/ns
+    result = Vector{JetConstituentsData}()
     
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
-    
-    # Process each jet
     for jet_constituents in jcs
-        # Initialize phi values for this jet
-        phi_values = Vector{Float32}()
-        
-        # Process each particle in the jet
+        phi_values = JetConstituentsData()
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
-                # Since we don't have direct access to tracks_begin, we need matching logic
-                # In a real implementation, you would implement proper track matching
                 if !isempty(tracks)
-                    # For this example, using the first track as a substitute
-                    # In a production system, you would implement proper track matching
                     track = tracks[1]
                     
                     D0_wrt0 = track.D0
@@ -436,7 +427,6 @@ function get_phi0(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(phi_values, -9.0f0)
             end
         end
@@ -450,56 +440,48 @@ end
 """
     get_dxy(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
             tracks::StructVector{EDM4hep.TrackState}, 
-            V::LorentzVector, Bz::Float64) -> Vector{Vector{Float32}}
+            V::LorentzVector, Bz::Float64) -> Vector{JetConstituentsData}
 
 Calculate the transverse impact parameter dxy for each particle in each jet relative to vertex V.
-This is a Julia implementation of the C++ function XPtoPar_dxy, adapted for jet constituents.
+Reference: FCCAnalyses c++ function XPtoPar_dxy, adapted for jet constituents.
 
-Parameters:
+# Arguments
 - jcs: Vector of jet constituents (each element contains particles for one jet)
 - tracks: StructVector of TrackState objects
 - V: LorentzVector representing the primary vertex
 - Bz: The magnetic field in Tesla
 
-Returns:
-- Vector of vectors of dxy values (one vector per jet)
+# Returns
+Vector of vectors of dxy values (one vector per jet)
 """
 function get_dxy(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                 tracks::StructVector{EDM4hep.TrackState}, 
                 V::LorentzVector, Bz::Float64)
-    # Constants
+
     cSpeed = 2.99792458e8 * 1.0e-9  # Speed of light in m/ns
     
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
+    result = Vector{JetConstituentsData}()
     
-    # Process each jet
     for jet_constituents in jcs
-        # Initialize dxy values for this jet
-        dxy_values = Vector{Float32}()
+        dxy_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
             track_found = false
             
             if p.charge != 0.0
                 if !isempty(tracks)
-                    track = tracks[1]  # Using the first track as a fallback
+                    track = tracks[1] 
                     
                     D0_wrt0 = track.D0
                     Z0_wrt0 = track.Z0
                     phi0_wrt0 = track.phi
                     
-                    # Create position vector at closest approach to (0,0,0)
                     X = [-D0_wrt0 * sin(phi0_wrt0), D0_wrt0 * cos(phi0_wrt0), Z0_wrt0]
                     
-                    # Position vector relative to vertex V
                     x = X .- [V.x, V.y, V.z]
                     
-                    # Momentum vector
                     p_vec = [p.momentum.x, p.momentum.y, p.momentum.z]
                     
-                    # Calculate impact parameter
                     a = -p.charge * Bz * cSpeed
                     pt = sqrt(p.momentum.x^2 + p.momentum.y^2)
                     r2 = x[1]^2 + x[2]^2
@@ -521,7 +503,6 @@ function get_dxy(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(dxy_values, -9.0f0)
             end
         end
@@ -535,35 +516,31 @@ end
 """
     get_dz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
             tracks::StructVector{EDM4hep.TrackState}, 
-            V::LorentzVector, Bz::Float64) -> Vector{Vector{Float32}}
+            V::LorentzVector, Bz::Float64) -> Vector{JetConstituentsData}
 
 Calculate the longitudinal impact parameter dz for each particle in each jet relative to vertex V.
-This is a Julia implementation of the C++ function XPtoPar_dz, adapted for jet constituents.
+Reference: FCCAnalyses c++ function XPtoPar_dz, adapted for jet constituents.
 
-Parameters:
+# Arguments
 - jcs: Vector of jet constituents (each element contains particles for one jet)
 - tracks: StructVector of TrackState objects
 - V: LorentzVector representing the primary vertex
 - Bz: The magnetic field in Tesla
 
-Returns:
-- Vector of vectors of dz values (one vector per jet)
+# Returns
+Vector of vectors of dz values (one vector per jet)
 """
 function get_dz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                 tracks::StructVector{EDM4hep.TrackState}, 
                 V::LorentzVector, Bz::Float64)
-    # Constants
+
     cSpeed = 2.99792458e8 * 1.0e-9  # Speed of light in m/ns
     
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
-    
-    # Process each jet
+    result = Vector{JetConstituentsData}()
+
     for jet_constituents in jcs
-        # Initialize dz values for this jet
-        dz_values = Vector{Float32}()
+        dz_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
             track_found = false
             
@@ -575,7 +552,6 @@ function get_dz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
                     Z0_wrt0 = track.Z0
                     phi0_wrt0 = track.phi
                     
-                    # Create position vector at closest approach to (0,0,0)
                     X = [
                         -D0_wrt0 * sin(phi0_wrt0), 
                         D0_wrt0 * cos(phi0_wrt0), 
@@ -632,7 +608,6 @@ function get_dz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(dz_values, -9.0f0)
             end
         end
@@ -645,31 +620,26 @@ end
 
 """
     get_dptdpt(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
-                tracks::StructVector{EDM4hep.TrackState}) -> Vector{Vector{Float32}}
+                tracks::StructVector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Get the omega covariance (dpt/dpt) for each particle in each jet from its associated track.
-This is a Julia implementation of the C++ function get_omega_cov, which uses getRP2TRK_omega_cov.
+Reference: FCCAnalyses c++ function get_omega_cov, adapted for jet constituents.
 
-Parameters:
+# Arguments
 - jcs: Vector of jet constituents (each element contains particles for one jet)
 - tracks: StructVector of TrackState objects
 
-Returns:
-- Vector of vectors of dptdpt values (one vector per jet)
+# Returns
+Vector of vectors of dptdpt values (one vector per jet)
 """
 function get_dptdpt(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                     tracks::StructVector{EDM4hep.TrackState})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
+    result = Vector{JetConstituentsData}()
     
-    # Process each jet
     for jet_constituents in jcs
-        # Initialize dptdpt values for this jet
-        dptdpt_values = Vector{Float32}()
-        
-        # Process each particle in the jet
+        dptdpt_values = JetConstituentsData()
+
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
@@ -681,7 +651,6 @@ function get_dptdpt(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(dptdpt_values, -9.0f0)
             end
         end
@@ -694,31 +663,27 @@ end
 
 """
     get_detadeta(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
-                tracks::StructVector{EDM4hep.TrackState}) -> Vector{Vector{Float32}}
+                tracks::StructVector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Get the tanLambda covariance (deta/deta) for each particle in each jet from its associated track.
-This is a Julia implementation of the C++ function get_tanlambda_cov.
+Reference: FCCAnalyses c++ function get_tanlambda_cov, adapted for jet constituents.
 
-Parameters:
+# Arguments
 - jcs: Vector of jet constituents (each element contains particles for one jet)
 - tracks: StructVector of TrackState objects
 
-Returns:
-- Vector of vectors of detadeta values (one vector per jet)
+# Returns
+Vector of vectors of detadeta values (one vector per jet)
 """
 function get_detadeta(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                     tracks::StructVector{EDM4hep.TrackState})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
+
+    result = Vector{JetConstituentsData}()
     
-    # Process each jet
     for jet_constituents in jcs
-        # Initialize detadeta values for this jet
-        detadeta_values = Vector{Float32}()
+        detadeta_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
@@ -730,7 +695,6 @@ function get_detadeta(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(detadeta_values, -9.0f0)
             end
         end
@@ -743,31 +707,27 @@ end
 
 """
     get_dphidphi(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
-                tracks::StructVector{EDM4hep.TrackState}) -> Vector{Vector{Float32}}
+                tracks::StructVector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Get the phi covariance (dphi/dphi) for each particle in each jet from its associated track.
-This is a Julia implementation of the C++ function get_phi0_cov.
+Reference: FCCAnalyses c++ function get_phi0_cov, adapted for jet constituents.
 
-Parameters:
+# Arguments
 - jcs: Vector of jet constituents (each element contains particles for one jet)
 - tracks: StructVector of TrackState objects
 
-Returns:
-- Vector of vectors of dphidphi values (one vector per jet)
+# Returns
+Vector of vectors of dphidphi values (one vector per jet)
 """
 function get_dphidphi(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                     tracks::StructVector{EDM4hep.TrackState})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
+
+    result = Vector{JetConstituentsData}()
     
-    # Process each jet
     for jet_constituents in jcs
-        # Initialize dphidphi values for this jet
-        dphidphi_values = Vector{Float32}()
+        dphidphi_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
@@ -779,7 +739,6 @@ function get_dphidphi(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(dphidphi_values, -9.0f0)
             end
         end
@@ -791,23 +750,19 @@ function get_dphidphi(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
 end
 
 """
-    get_dxydxy(jcs::Vector{FCCAnalysesJetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_dxydxy(jcs::Vector{JetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Get the d0 covariance (dxy/dxy) for each particle.
 """
 function get_dxydxy(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                     tracks::StructVector{EDM4hep.TrackState})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
+
+    result = Vector{JetConstituentsData}()
     
-    # Process each jet
     for jet_constituents in jcs
-        # Initialize dxydxy values for this jet
-        dxydxy_values = Vector{Float32}()
+        dxydxy_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
@@ -819,7 +774,6 @@ function get_dxydxy(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(dxydxy_values, -9.0f0)
             end
         end
@@ -831,23 +785,18 @@ function get_dxydxy(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
 end
 
 """
-    get_dzdz(jcs::Vector{FCCAnalysesJetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_dzdz(jcs::Vector{JetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Get the z0 covariance (dz/dz) for each particle.
 """
 function get_dzdz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                     tracks::StructVector{EDM4hep.TrackState})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
+    result = Vector{JetConstituentsData}()
     
-    # Process each jet
     for jet_constituents in jcs
-        # Initialize dzdz values for this jet
-        dzdz_values = Vector{Float32}()
+        dzdz_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
@@ -859,7 +808,6 @@ function get_dzdz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(dzdz_values, -9.0f0)
             end
         end
@@ -871,23 +819,18 @@ function get_dzdz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
 end
 
 """
-    get_dxydz(jcs::Vector{FCCAnalysesJetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_dxydz(jcs::Vector{JetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Get the d0-z0 covariance (dxy/dz) for each particle.
 """
 function get_dxydz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                     tracks::StructVector{EDM4hep.TrackState})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
-    
-    # Process each jet
+    result = Vector{JetConstituentsData}()
+
     for jet_constituents in jcs
-        # Initialize dxydz values for this jet
-        dxydz_values = Vector{Float32}()
+        dxydz_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
@@ -899,7 +842,6 @@ function get_dxydz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(dxydz_values, -9.0f0)
             end
         end
@@ -911,23 +853,19 @@ function get_dxydz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
 end
 
 """
-    get_dphidxy(jcs::Vector{FCCAnalysesJetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_dphidxy(jcs::Vector{JetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Get the phi0-d0 covariance (dphi/dxy) for each particle.
 """
 function get_dphidxy(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                     tracks::StructVector{EDM4hep.TrackState})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
-    
-    # Process each jet
+
+    result = Vector{JetConstituentsData}()
+
     for jet_constituents in jcs
-        # Initialize dphidxy values for this jet
-        dphidxy_values = Vector{Float32}()
+        dphidxy_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
@@ -939,7 +877,6 @@ function get_dphidxy(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(dphidxy_values, -9.0f0)
             end
         end
@@ -951,23 +888,19 @@ function get_dphidxy(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
 end
 
 """
-    get_dlambdadz(jcs::Vector{FCCAnalysesJetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_dlambdadz(jcs::Vector{JetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Get the tanLambda-z0 covariance (dlambda/dz) for each particle.
 """
 function get_dlambdadz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                     tracks::StructVector{EDM4hep.TrackState})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
+
+    result = Vector{JetConstituentsData}()
     
-    # Process each jet
     for jet_constituents in jcs
-        # Initialize dlambdadz values for this jet
-        dlambdadz_values = Vector{Float32}()
+        dlambdadz_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
@@ -979,7 +912,6 @@ function get_dlambdadz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(dlambdadz_values, -9.0f0)
             end
         end
@@ -991,23 +923,19 @@ function get_dlambdadz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
 end
 
 """
-    get_phidz(jcs::Vector{FCCAnalysesJetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_phidz(jcs::Vector{JetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Get the phi0-z0 covariance (dphi/dz) for each particle.
 """
 function get_phidz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                     tracks::StructVector{EDM4hep.TrackState})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
     
-    # Process each jet
+    result = Vector{JetConstituentsData}()
+    
     for jet_constituents in jcs
-        # Initialize phidz values for this jet
-        phidz_values = Vector{Float32}()
+        phidz_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
@@ -1019,7 +947,6 @@ function get_phidz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(phidz_values, -9.0f0)
             end
         end
@@ -1031,23 +958,19 @@ function get_phidz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
 end
 
 """
-    get_dxyc(jcs::Vector{FCCAnalysesJetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_dxyc(jcs::Vector{JetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Get the d0-omega covariance (dxy/c) for each particle.
 """
 function get_dxyc(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                     tracks::StructVector{EDM4hep.TrackState})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
     
-    # Process each jet
+    result = Vector{JetConstituentsData}()
+    
     for jet_constituents in jcs
-        # Initialize dxyc values for this jet
-        dxyc_values = Vector{Float32}()
+        dxyc_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
@@ -1059,7 +982,6 @@ function get_dxyc(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(dxyc_values, -9.0f0)
             end
         end
@@ -1071,23 +993,19 @@ function get_dxyc(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
 end
 
 """
-    get_dxyctgtheta(jcs::Vector{FCCAnalysesJetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_dxyctgtheta(jcs::Vector{JetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Get the d0-tanLambda covariance (dxy/ctgtheta) for each particle.
 """
 function get_dxyctgtheta(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                     tracks::StructVector{EDM4hep.TrackState})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
     
-    # Process each jet
+    result = Vector{JetConstituentsData}()
+    
     for jet_constituents in jcs
-        # Initialize dxyctgtheta values for this jet
-        dxyctgtheta_values = Vector{Float32}()
+        dxyctgtheta_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
@@ -1099,7 +1017,6 @@ function get_dxyctgtheta(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(dxyctgtheta_values, -9.0f0)
             end
         end
@@ -1111,23 +1028,19 @@ function get_dxyctgtheta(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}
 end
 
 """
-    get_phic(jcs::Vector{FCCAnalysesJetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_phic(jcs::Vector{JetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Get the phi0-omega covariance (phi/c) for each particle.
 """
 function get_phic(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                     tracks::StructVector{EDM4hep.TrackState})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
     
-    # Process each jet
+    result = Vector{JetConstituentsData}()
+    
     for jet_constituents in jcs
-        # Initialize phic values for this jet
-        phic_values = Vector{Float32}()
+        phic_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
@@ -1139,7 +1052,6 @@ function get_phic(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(phic_values, -9.0f0)
             end
         end
@@ -1151,23 +1063,19 @@ function get_phic(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
 end
 
 """
-    get_phictgtheta(jcs::Vector{FCCAnalysesJetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_phictgtheta(jcs::Vector{JetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Get the phi0-tanLambda covariance (phi/ctgtheta) for each particle.
 """
 function get_phictgtheta(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                     tracks::StructVector{EDM4hep.TrackState})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
     
-    # Process each jet
+    result = Vector{JetConstituentsData}()
+    
     for jet_constituents in jcs
-        # Initialize phictgtheta values for this jet
-        phictgtheta_values = Vector{Float32}()
+        phictgtheta_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
@@ -1179,7 +1087,6 @@ function get_phictgtheta(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(phictgtheta_values, -9.0f0)
             end
         end
@@ -1191,23 +1098,19 @@ function get_phictgtheta(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}
 end
 
 """
-    get_cdz(jcs::Vector{FCCAnalysesJetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_cdz(jcs::Vector{JetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Get the omega-z0 covariance (c/dz) for each particle.
 """
 function get_cdz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                     tracks::StructVector{EDM4hep.TrackState})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
     
-    # Process each jet
+    result = Vector{JetConstituentsData}()
+    
     for jet_constituents in jcs
-        # Initialize cdz values for this jet
-        cdz_values = Vector{Float32}()
+        cdz_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
@@ -1219,7 +1122,6 @@ function get_cdz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(cdz_values, -9.0f0)
             end
         end
@@ -1231,23 +1133,19 @@ function get_cdz(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
 end
 
 """
-    get_cctgtheta(jcs::Vector{FCCAnalysesJetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_cctgtheta(jcs::Vector{JetConstituents}, tracks::Vector{EDM4hep.TrackState}) -> Vector{JetConstituentsData}
 
 Get the omega-tanLambda covariance (c/ctgtheta) for each particle.
 """
 function get_cctgtheta(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
                     tracks::StructVector{EDM4hep.TrackState})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
     
-    # Process each jet
+    result = Vector{JetConstituentsData}()
+    
     for jet_constituents in jcs
-        # Initialize cctgtheta values for this jet
-        cctgtheta_values = Vector{Float32}()
+        cctgtheta_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for p in jet_constituents
-            # For charged particles, try to find a matching track
             track_found = false
             
             if p.charge != 0.0
@@ -1259,7 +1157,6 @@ function get_cctgtheta(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
             end
             
             if !track_found
-                # No valid track found or particle is neutral
                 push!(cctgtheta_values, -9.0f0)
             end
         end
@@ -1271,21 +1168,21 @@ function get_cctgtheta(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
 end
 
 """
-    get_erel_log_cluster(jets::Vector{EEjet}, 
-                        jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}) -> Vector{Vector{Float32}}
+    get_erel_log_cluster(jets::Vector{EEJet}, 
+                        jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}) -> Vector{JetConstituentsData}
 
 Calculate log of relative energy (log(E_const/E_jet)) for each constituent particle in clustered jets.
 """
-function get_erel_log_cluster(jets::Vector{EEjet}, 
+function get_erel_log_cluster(jets::Vector{EEJet}, 
                             jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}})
     # Define the result type
-    result = Vector{Vector{Float32}}()
+    result = Vector{JetConstituentsData}()
     
     for i in eachindex(jets)
         jet_csts = Float32[]
         
         # Get jet energy
-        e_jet = jets[i].E  # Assuming EEjet has an e property for energy
+        e_jet = jets[i].E  # Assuming EEJet has an e property for energy
         
         # Get constituents for this jet
         if i <= length(jcs)
@@ -1306,14 +1203,14 @@ function get_erel_log_cluster(jets::Vector{EEjet},
 end
 
 """
-    get_thetarel_cluster(jets::Vector{EEjet}, 
-                        jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}) -> Vector{Vector{Float32}}
+    get_thetarel_cluster(jets::Vector{EEJet}, 
+                        jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}) -> Vector{JetConstituentsData}
 
 Calculate relative theta angle between constituent particle and clustered jet axis.
 """
-function get_thetarel_cluster(jets::Vector{EEjet}, 
+function get_thetarel_cluster(jets::Vector{EEJet}, 
                             jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}})
-    result = Vector{Vector{Float32}}()
+    result = Vector{JetConstituentsData}()
     
     for i in eachindex(jets)
         jet_csts = Float32[]
@@ -1364,21 +1261,21 @@ function get_thetarel_cluster(jets::Vector{EEjet},
 end
 
 """
-    get_phirel_cluster(jets::Vector{EEjet}, 
-                        jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}) -> Vector{Vector{Float32}}
+    get_phirel_cluster(jets::Vector{EEJet}, 
+                        jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}) -> Vector{JetConstituentsData}
 
 Calculate relative phi angle between constituent particle and clustered jet axis.
 """
-function get_phirel_cluster(jets::Vector{EEjet}, 
+function get_phirel_cluster(jets::Vector{EEJet}, 
                             jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}})
-    result = Vector{Vector{Float32}}()
+    result = Vector{JetConstituentsData}()
     
     for i in eachindex(jets)
         jet_csts = Float32[]
         
         # Create a 4-vector for the jet
         jet = jets[i]
-        # Access momentum components from EEjet
+        # Access momentum components from EEJet
         px, py, pz, E = jet.px, jet.py, jet.pz, jet.E
         
         # Calculate jet direction angles
@@ -1421,15 +1318,15 @@ function get_phirel_cluster(jets::Vector{EEjet},
     return result
 end
 """
-    get_isMu(jcs::Vector{FCCAnalysesJetConstituents}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_isMu(jcs::Vector{JetConstituents}) -> Vector{JetConstituentsData}
 
 Check if each constituent particle is a muon.
 """
-function get_isMu(jcs::Vector{FCCAnalysesJetConstituents})
-    result = Vector{FCCAnalysesJetConstituentsData}()
+function get_isMu(jcs::Vector{JetConstituents})
+    result = Vector{JetConstituentsData}()
     
     for jet_constituents in jcs
-        is_mu = FCCAnalysesJetConstituentsData()
+        is_mu = JetConstituentsData()
         
         for p in jet_constituents
             if abs(p.charge) > 0 && abs(p.mass - 0.105658) < 1e-3
@@ -1446,15 +1343,15 @@ function get_isMu(jcs::Vector{FCCAnalysesJetConstituents})
 end
 
 """
-    get_isEl(jcs::Vector{FCCAnalysesJetConstituents}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_isEl(jcs::Vector{JetConstituents}) -> Vector{JetConstituentsData}
 
 Check if each constituent particle is an electron.
 """
-function get_isEl(jcs::Vector{FCCAnalysesJetConstituents})
-    result = Vector{FCCAnalysesJetConstituentsData}()
+function get_isEl(jcs::Vector{JetConstituents})
+    result = Vector{JetConstituentsData}()
     
     for jet_constituents in jcs
-        is_el = FCCAnalysesJetConstituentsData()
+        is_el = JetConstituentsData()
         
         for p in jet_constituents
             if abs(p.charge) > 0 && abs(p.mass - 0.000510999) < 1e-5
@@ -1471,15 +1368,15 @@ function get_isEl(jcs::Vector{FCCAnalysesJetConstituents})
 end
 
 """
-    get_isChargedHad(jcs::Vector{FCCAnalysesJetConstituents}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_isChargedHad(jcs::Vector{JetConstituents}) -> Vector{JetConstituentsData}
 
 Check if each constituent particle is a charged hadron.
 """
-function get_isChargedHad(jcs::Vector{FCCAnalysesJetConstituents})
-    result = Vector{FCCAnalysesJetConstituentsData}()
+function get_isChargedHad(jcs::Vector{JetConstituents})
+    result = Vector{JetConstituentsData}()
     
     for jet_constituents in jcs
-        is_charged_had = FCCAnalysesJetConstituentsData()
+        is_charged_had = JetConstituentsData()
         
         for p in jet_constituents
             if abs(p.charge) > 0 && abs(p.mass - 0.13957) < 1e-3
@@ -1496,15 +1393,15 @@ function get_isChargedHad(jcs::Vector{FCCAnalysesJetConstituents})
 end
 
 """
-    get_isGamma(jcs::Vector{FCCAnalysesJetConstituents}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_isGamma(jcs::Vector{JetConstituents}) -> Vector{JetConstituentsData}
 
 Check if each constituent particle is a photon (gamma).
 """
-function get_isGamma(jcs::Vector{FCCAnalysesJetConstituents})
-    result = Vector{FCCAnalysesJetConstituentsData}()
+function get_isGamma(jcs::Vector{JetConstituents})
+    result = Vector{JetConstituentsData}()
     
     for jet_constituents in jcs
-        is_gamma = FCCAnalysesJetConstituentsData()
+        is_gamma = JetConstituentsData()
         
         for p in jet_constituents
             if p.particleIDs == 22  # PDG code for photon
@@ -1521,15 +1418,15 @@ function get_isGamma(jcs::Vector{FCCAnalysesJetConstituents})
 end
 
 """
-    get_isNeutralHad(jcs::Vector{FCCAnalysesJetConstituents}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_isNeutralHad(jcs::Vector{JetConstituents}) -> Vector{JetConstituentsData}
 
 Check if each constituent particle is a neutral hadron.
 """
-function get_isNeutralHad(jcs::Vector{FCCAnalysesJetConstituents})
-    result = Vector{FCCAnalysesJetConstituentsData}()
+function get_isNeutralHad(jcs::Vector{JetConstituents})
+    result = Vector{JetConstituentsData}()
     
     for jet_constituents in jcs
-        is_neutral_had = FCCAnalysesJetConstituentsData()
+        is_neutral_had = JetConstituentsData()
         
         for p in jet_constituents
             if p.particleIDs == 130  # PDG code for K_L^0 (common neutral hadron)
@@ -1547,134 +1444,152 @@ end
 
 """
     get_mtof(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
-             track_L::Vector{Float32},
-             trackdata::StructVector{EDM4hep.Track},
-             trackerhits::StructVector{EDM4hep.TrackerHit3D},
-             gammadata::StructVector{EDM4hep.Cluster},
-             nhdata::StructVector{EDM4hep.Cluster},
-             calohits::StructVector{EDM4hep.CalorimeterHit},
-             V::LorentzVector) -> Vector{Vector{Float32}}
+            track_L::JetConstituentsData,
+            trackdata::StructVector{EDM4hep.Track},
+            trackerhits::StructVector{EDM4hep.TrackerHit},
+            gammadata::StructVector{EDM4hep.Cluster},
+            nhdata::StructVector{EDM4hep.Cluster},
+            calohits::StructVector{EDM4hep.CalorimeterHit},
+            V::LorentzVector) -> Vector{JetConstituentsData}
 
 Calculate the mass using time-of-flight measurements for each particle in each jet.
 This is a Julia implementation of the C++ function get_mtof.
 
-Parameters:
+# Arguments
 - jcs: Vector of jet constituents (each element contains particles for one jet)
 - track_L: Vector of track lengths
 - trackdata: StructVector of Track objects
-- trackerhits: StructVector of TrackerHit3D objects 
+- trackerhits: StructVector of TrackerHit objects 
 - gammadata: StructVector of photon Cluster objects
 - nhdata: StructVector of neutral hadron Cluster objects
 - calohits: StructVector of CalorimeterHit objects
 - V: LorentzVector representing the primary vertex position and time
 
-Returns:
-- Vector of vectors of mtof values (one vector per jet)
+# Returns
+Vector of vectors of mtof values (one vector per jet)
 """
 function get_mtof(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
-                 track_L::Vector{Float32},
-                 trackdata::StructVector{EDM4hep.Track},
-                 trackerhits::StructVector{EDM4hep.TrackerHit},
-                 gammadata::StructVector{EDM4hep.Cluster},
-                 nhdata::StructVector{EDM4hep.Cluster},
-                 calohits::StructVector{EDM4hep.CalorimeterHit},
-                 V::LorentzVector)
+                track_L::JetConstituentsData,
+                trackdata::StructVector{EDM4hep.Track},
+                trackerhits::StructVector{EDM4hep.TrackerHit},
+                gammadata::StructVector{EDM4hep.Cluster},
+                nhdata::StructVector{EDM4hep.Cluster},
+                calohits::StructVector{EDM4hep.CalorimeterHit},
+                V::LorentzVector)
     
     # Speed of light in m/s
     c_light = 2.99792458e8
     
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
     
-    # Process each jet
+    result = Vector{JetConstituentsData}()
+    
     for i in eachindex(jcs)
         # Get current jet constituents
         constituents = jcs[i]
-        # Initialize mtof values for this jet
-        mtof_values = Vector{Float32}()
+        mtof_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for j in eachindex(constituents)
             particle = constituents[j]
             mtof_added = false
             
+            # NEUTRAL PARTICLES - Handle neutral hadrons (K_L^0) and photons
+            
             # Check if this is a cluster-based particle (neutral hadron or photon)
-            # Note: In a real implementation, you'd need proper logic to check clusters_begin and adjust
-            # the following logic based on your actual data structures
-            if !isempty(nhdata) && !isempty(gammadata) && j <= length(nhdata) + length(gammadata)
+            if hasfield(typeof(particle), :clusters_begin) && particle.clusters_begin > 0
+                
                 # K_L^0 (PDG code 130)
-                if particle.PDG == 130
+                if particle.particleIDs == 130 && particle.clusters_begin < length(nhdata) + length(gammadata)
                     # For neutral hadrons
-                    # This assumes photons are filled first and neutral hadrons after
-                    # In a real implementation, you'd need proper indexing logic
-                    if !isempty(calohits) && j <= length(calohits)
-                        # Just using first calohit as an example
-                        calohit = calohits[1]
-                        
-                        # Get time and position from calorimeter hit
-                        T = calohit.time
-                        X = calohit.position.x
-                        Y = calohit.position.y
-                        Z = calohit.position.z
-                        
-                        # Time of flight
-                        tof = T
-                        
-                        # Compute path length with respect to primary vertex (convert to km)
-                        L = sqrt((X - V.x)^2 + (Y - V.y)^2 + (Z - V.z)^2) * 0.001
-                        
-                        # Calculate beta (v/c)
-                        beta = L / (tof * c_light)
-                        
-                        # Get particle energy
-                        E = particle.energy
-                        
-                        # Calculate mass from relativistic formula: m = E * sqrt(1 - β²)
-                        if beta < 1.0 && beta > 0.0
-                            push!(mtof_values, Float32(E * sqrt(1.0 - beta * beta)))
-                            mtof_added = true
-                        else
-                            push!(mtof_values, 9.0f0)
-                            mtof_added = true
+                    cluster_idx = particle.clusters_begin - length(gammadata)
+                    
+                    if cluster_idx >= 0 && cluster_idx < length(nhdata)
+                        # Get the first hit from the neutral hadron cluster
+                        if nhdata[cluster_idx+1].hits_begin < length(calohits)
+                            hit_idx = nhdata[cluster_idx+1].hits_begin
+                            calohit = calohits[hit_idx+1]
+                            
+                            # Get time and position from calorimeter hit
+                            T = calohit.time
+                            X = calohit.position.x
+                            Y = calohit.position.y
+                            Z = calohit.position.z
+                            
+                            # Time of flight
+                            tof = T
+                            
+                            # Compute path length with respect to primary vertex (convert to km)
+                            L = sqrt((X - V.x)^2 + (Y - V.y)^2 + (Z - V.z)^2) * 0.001
+                            
+                            # Calculate beta (v/c)
+                            beta = L / (tof * c_light)
+                            
+                            # Get particle energy
+                            E = particle.energy
+                            
+                            # Calculate mass from relativistic formula: m = E * sqrt(1 - β²)
+                            if beta < 1.0 && beta > 0.0
+                                push!(mtof_values, Float32(E * sqrt(1.0 - beta * beta)))
+                                mtof_added = true
+                            else
+                                push!(mtof_values, 9.0f0)  # Invalid measurement
+                                mtof_added = true
+                            end
                         end
                     end
-                elseif particle.PDG == 22  # Photon
-                    push!(mtof_values, 0.0f0)
+                elseif particle.particleIDs == 22  # Photon
+                    push!(mtof_values, 0.0f0)  # Photons have zero mass
                     mtof_added = true
                 end
             end
+
+            # CHARGED PARTICLES - Handle electrons, muons, and charged hadrons
             
             # Check if this is a track-based particle
-            # In a real implementation, you'd need proper track matching
-            if !mtof_added && !isempty(trackdata)
+            if !mtof_added && hasfield(typeof(particle), :tracks_begin) && particle.tracks_begin > 0
                 # Check if this is an electron
                 if abs(particle.charge) > 0 && abs(particle.mass - 0.000510999) < 1e-5
-                    push!(mtof_values, 0.000510999f0)
+                    push!(mtof_values, 0.000510999f0)  # Electron mass
                     mtof_added = true
                 
                 # Check if this is a muon
                 elseif abs(particle.charge) > 0 && abs(particle.mass - 0.105658) < 1e-3
-                    push!(mtof_values, 0.105658f0)
+                    push!(mtof_values, 0.105658f0)  # Muon mass
                     mtof_added = true
                     
-                # Other charged particles
-                elseif !isempty(trackerhits) && !isempty(track_L)
-                    # Time given by primary vertex (convert from mm to second)
+                # Other charged particles (mainly pions and kaons)
+                elseif particle.tracks_begin < length(trackdata)
+                    track_idx = particle.tracks_begin
+                    
+                    # Time given by primary vertex (convert from mm to seconds)
                     Tin = V.t * 1e-3 / c_light
                     
-                    # For demonstration, use first trackerhit
-                    # In a real implementation, you'd need proper track matching
-                    Tout = isempty(trackerhits) ? 0.0f0 : trackerhits[1].time
+                    # Get the last hit time from the track
+                    Tout = 0.0f0
+                    if track_idx < length(trackdata) && 
+                        trackdata[track_idx+1].trackerHits_begin < length(trackerhits) &&
+                        trackdata[track_idx+1].trackerHits_end > 0
+                        
+                        # Get the last hit in the track
+                        last_hit_idx = trackdata[track_idx+1].trackerHits_end - 1
+                        if last_hit_idx < length(trackerhits)
+                            Tout = trackerhits[last_hit_idx+1].time
+                        end
+                    end
                     
                     # Time of flight
                     tof = Tout - Tin
                     
-                    # Use first track length for demonstration
-                    # In a real implementation, you'd match with the correct track
-                    L = isempty(track_L) ? 0.0f0 : track_L[1] * 0.001
+                    # Get track length
+                    L = 0.0f0
+                    if track_idx < length(track_L)
+                        L = track_L[track_idx+1] * 0.001  # Convert to km
+                    end
                     
                     # Calculate beta (v/c)
-                    beta = L / (tof * c_light)
+                    beta = 0.0f0
+                    if tof > 0.0
+                        beta = L / (tof * c_light)
+                    end
                     
                     # Calculate momentum
                     p = sqrt(particle.momentum.x^2 + particle.momentum.y^2 + particle.momentum.z^2)
@@ -1703,87 +1618,116 @@ function get_mtof(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
 end
 
 """
-    get_dndx(jcs::Vector{FCCAnalysesJetConstituents}, dNdx::Vector{EDM4hep.Quantity},
-             trackdata::Vector{EDM4hep.Track}, 
-             JetsConstituents_isChargedHad::Vector{FCCAnalysesJetConstituentsData}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_dndx(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
+            dNdx::StructVector{EDM4hep.Quantity},
+            trackdata::StructVector{EDM4hep.Track}, 
+            JetsConstituents_isChargedHad::Vector{JetConstituentsData}) -> Vector{JetConstituentsData}
 
-Calculate dE/dx or dN/dx for each charged hadron in the jet.
+Calculate dE/dx or dN/dx for each charged hadron in jets. Neutrals, muons, and electrons are set to 0.
+Only charged hadrons have valid dN/dx values.
+
+# Arguments
+- jcs: Vector of jet constituents (each element contains particles for one jet)
+- dNdx: StructVector of Quantity objects containing dN/dx measurements (EFlowTrack_2)
+- trackdata: StructVector of Track objects (EFlowTrack)
+- JetsConstituents_isChargedHad: Vector of vectors indicating which particles are charged hadrons
+
+# Returns
+Vector of vectors of dN/dx values (one vector per jet, one value per constituent)
 """
-function get_dndx(jcs::Vector{FCCAnalysesJetConstituents}, dNdx::Vector{EDM4hep.Quantity},
-                  trackdata::Vector{EDM4hep.Track}, 
-                  JetsConstituents_isChargedHad::Vector{FCCAnalysesJetConstituentsData})
-    result = Vector{FCCAnalysesJetConstituentsData}()
+# TODO: Fix the issue here with the tracks relationship
+function get_dndx(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}}, 
+                dNdx::StructVector{EDM4hep.Quantity},
+                trackdata::StructVector{EDM4hep.Track}, 
+                JetsConstituents_isChargedHad::Vector{JetConstituentsData})
+    
+    result = Vector{JetConstituentsData}()
     
     for i in eachindex(jcs)
+        # Get current jet constituents and charged hadron flags
         constituents = jcs[i]
         isChargedHad = JetsConstituents_isChargedHad[i]
-        tmp = FCCAnalysesJetConstituentsData()
+        dndx_values = JetConstituentsData()
         
         for j in eachindex(constituents)
-            if j <= length(isChargedHad) && constituents[j].tracks_begin < length(trackdata) && 
-               isChargedHad[j] == 1.0
-                track_idx = constituents[j].tracks_begin
-                if track_idx < length(trackdata) && trackdata[track_idx+1].dxQuantities_begin < length(dNdx)
-                    # Convert to GeV
-                    push!(tmp, dNdx[trackdata[track_idx+1].dxQuantities_begin+1].value / 1000.0)
-                else
-                    push!(tmp, 0.0f0)
+            particle = constituents[j]
+            
+            # Check if this is a charged hadron
+            if j <= length(isChargedHad) && isChargedHad[j] == 1.0
+                # For charged hadrons, try to find associated track
+                track_found = false
+                
+                # Check if particle has tracks relationship
+                if isdefined(particle, :tracks) && !isnothing(particle.tracks) && !isempty(particle.tracks)
+                    # Get the track directly from the relationship
+                    track = first(particle.tracks)  # Using first track if multiple are present
+                    
+                    # Check if track has dxQuantities relationship
+                    if isdefined(track, :dxQuantities) && !isnothing(track.dxQuantities) && 
+                        !isempty(track.dxQuantities)
+                        
+                        # Get the dxQuantity directly
+                        dx_quantity = first(track.dxQuantities)
+                        
+                        # Get dN/dx value and convert from MeV to GeV
+                        push!(dndx_values, dx_quantity.value / 1000.0)
+                        track_found = true
+                    end
+                end
+                
+                if !track_found
+                    # No valid dN/dx data found
+                    push!(dndx_values, -1.0f0)
                 end
             else
-                push!(tmp, 0.0f0)
+                # Not a charged hadron (neutral, muon, or electron)
+                push!(dndx_values, 0.0f0)
             end
         end
         
-        push!(result, tmp)
+        push!(result, dndx_values)
     end
     
     return result
 end
-### TODO: Update the trackData function
 
 """
     get_Sip2dVal_clusterV(jets::Vector{JetReconstruction.PseudoJet},
-                         D0::Vector{Vector{Float32}},
-                         phi0::Vector{Vector{Float32}},
-                         Bz::Float32) -> Vector{Vector{Float32}}
+                        D0::Vector{JetConstituentsData},
+                        phi0::Vector{JetConstituentsData},
+                        Bz::Float64) -> Vector{JetConstituentsData}
 
 Calculate the 2D signed impact parameter value for each particle relative to the jet axis.
 This is a Julia implementation of the C++ function get_Sip2dVal_clusterV.
 
-Parameters:
+# Arguments
 - jets: Vector of PseudoJet objects representing jets
 - D0: Vector of vectors containing D0 values (transverse impact parameters)
 - phi0: Vector of vectors containing phi0 values (azimuthal angles at impact point)
 - Bz: The magnetic field in Tesla
 
-Returns:
-- Vector of vectors of 2D signed impact parameter values (one vector per jet)
+# Returns
+Vector of vectors of 2D signed impact parameter values (one vector per jet)
 """
-function get_Sip2dVal_clusterV(jets::Vector{JetReconstruction.EEjet},
-                              D0::Vector{Vector{Float32}},
-                              phi0::Vector{Vector{Float32}},
-                              Bz::Float64)
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
+function get_Sip2dVal_clusterV(jets::Vector{JetReconstruction.EEJet},
+                            D0::Vector{JetConstituentsData},
+                            phi0::Vector{JetConstituentsData},
+                            Bz::Float64)
+
+    result = Vector{JetConstituentsData}()
     
-    # Process each jet
     for i in eachindex(jets)
-        # Create 2D vector for jet direction in transverse plane
-        p = TVector2(jets[i].px, jets[i].py)
+        p = Vector2(jets[i].px, jets[i].py)
         
-        # Initialize impact parameter values for this jet
-        sip2d_values = Vector{Float32}()
+        sip2d_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for j in eachindex(D0[i])
             if D0[i][j] != -9.0f0
                 # Calculate the 2D impact point vector
-                d0 = TVector2(-D0[i][j] * sin(phi0[i][j]), 
+                d0 = Vector2(-D0[i][j] * sin(phi0[i][j]), 
                               D0[i][j] * cos(phi0[i][j]))
-                
-                # Calculate dot product for sign determination
                 dot_product = d0.X * p.X + d0.Y * p.Y
-                
+
                 # Sign based on dot product and magnitude based on D0
                 signed_ip = sign(dot_product) * abs(D0[i][j])
                 
@@ -1799,39 +1743,45 @@ function get_Sip2dVal_clusterV(jets::Vector{JetReconstruction.EEjet},
     return result
 end
 
-function get_btagSip2dVal(jets::Vector{JetReconstruction.EEjet},
-    pfcand_dxy::Vector{Vector{Float32}},
-    pfcand_phi0::Vector{Vector{Float32}},
+
+"""
+    get_btagSip2dVal(jets::Vector{JetReconstruction.PseudoJet},
+                    pfcand_dxy::Vector{JetConstituentsData},
+                    pfcand_phi0::Vector{JetConstituentsData},
+                    Bz::Float32) -> Vector{JetConstituentsData}
+
+Call the implementation function get_Sip2dVal_clusterV
+"""
+function get_btagSip2dVal(jets::Vector{JetReconstruction.EEJet},
+    pfcand_dxy::Vector{JetConstituentsData},
+    pfcand_phi0::Vector{JetConstituentsData},
     Bz::Float64)
-# Simply call the implementation function
-return get_Sip2dVal_clusterV(jets, pfcand_dxy, pfcand_phi0, Bz)
+    # Simply call the implementation function
+    return get_Sip2dVal_clusterV(jets, pfcand_dxy, pfcand_phi0, Bz)
 end
 
 """
-    get_Sip2dSig(Sip2dVals::Vector{Vector{Float32}},
-                err2_D0::Vector{Vector{Float32}}) -> Vector{Vector{Float32}}
+    get_Sip2dSig(Sip2dVals::Vector{JetConstituentsData},
+                err2_D0::Vector{JetConstituentsData}) -> Vector{JetConstituentsData}
 
 Calculate the 2D signed impact parameter significance for each particle.
 This is a Julia implementation of the C++ function get_Sip2dSig.
 
-Parameters:
+# Arguments
 - Sip2dVals: Vector of vectors containing 2D signed impact parameter values
 - err2_D0: Vector of vectors containing squared errors of the D0 values
 
-Returns:
-- Vector of vectors of 2D signed impact parameter significances (one vector per jet)
+# Returns
+Vector of vectors of 2D signed impact parameter significances (one vector per jet)
 """
-function get_Sip2dSig(Sip2dVals::Vector{Vector{Float32}},
-                    err2_D0::Vector{Vector{Float32}})
-    # Initialize result vector
-    result = Vector{Vector{Float32}}()
+function get_Sip2dSig(Sip2dVals::Vector{JetConstituentsData},
+                    err2_D0::Vector{JetConstituentsData})
     
-    # Process each jet
+    result = Vector{JetConstituentsData}()
+    
     for i in eachindex(Sip2dVals)
-        # Initialize significance values for this jet
-        sig_values = Vector{Float32}()
+        sig_values = JetConstituentsData()
         
-        # Process each particle in the jet
         for j in eachindex(Sip2dVals[i])
             # Only calculate significance if the error is positive
             if j <= length(err2_D0[i]) && err2_D0[i][j] > 0.0
@@ -1850,42 +1800,47 @@ function get_Sip2dSig(Sip2dVals::Vector{Vector{Float32}},
     return result
 end
 
-function get_btagSip2dSig(pfcand_btagSip2dVal::Vector{Vector{Float32}},
-                        pfcand_dxydxy::Vector{Vector{Float32}})
+"""
+    get_btagSip2dSig(pfcand_btagSip2dVal::Vector{JetConstituentsData},
+                    pfcand_dxydxy::Vector{JetConstituentsData}) -> Vector{JetConstituentsData}
+
+Call the implementation function get_Sip2dSig
+"""
+function get_btagSip2dSig(pfcand_btagSip2dVal::Vector{JetConstituentsData},
+                        pfcand_dxydxy::Vector{JetConstituentsData})
     # Simply call the implementation function
     return get_Sip2dSig(pfcand_btagSip2dVal, pfcand_dxydxy)
 end
 
 """
     get_Sip3dVal_clusterV(jets::Vector{JetReconstruction.PseudoJet},
-                         D0::Vector{FCCAnalysesJetConstituentsData},
-                         Z0::Vector{FCCAnalysesJetConstituentsData},
-                         phi0::Vector{FCCAnalysesJetConstituentsData},
-                         Bz::Float32) -> Vector{FCCAnalysesJetConstituentsData}
+                        D0::Vector{JetConstituentsData},
+                        Z0::Vector{JetConstituentsData},
+                        phi0::Vector{JetConstituentsData},
+                        Bz::Float32) -> Vector{JetConstituentsData}
 
 Calculate the 3D signed impact parameter value for each particle relative to the jet axis.
 """
-function get_Sip3dVal_clusterV(jets::Vector{JetReconstruction.PseudoJet},
-                              D0::Vector{FCCAnalysesJetConstituentsData},
-                              Z0::Vector{FCCAnalysesJetConstituentsData},
-                              phi0::Vector{FCCAnalysesJetConstituentsData},
-                              Bz::Float32)
-    result = Vector{FCCAnalysesJetConstituentsData}()
-    
+function get_Sip3dVal_clusterV(jets::Vector{JetReconstruction.EEJet},
+                            D0::Vector{JetConstituentsData},
+                            Z0::Vector{JetConstituentsData},
+                            phi0::Vector{JetConstituentsData},
+                            Bz::Float64)
+    result = Vector{JetConstituentsData}()
     for i in eachindex(jets)
-        p = TVector3(jets[i].px(), jets[i].py(), jets[i].pz())
-        cprojs = FCCAnalysesJetConstituentsData()
+        p = Vector3(jets[i].px, jets[i].py, jets[i].pz)
+        cprojs = JetConstituentsData()
         
         for j in eachindex(D0[i])
             if D0[i][j] != -9.0
                 # Create 3D vector of displacement at point of closest approach
-                d = TVector3(-D0[i][j] * sin(phi0[i][j]), 
-                             D0[i][j] * cos(phi0[i][j]), 
-                             Z0[i][j])
+                d = Vector3(-D0[i][j] * sin(phi0[i][j]), 
+                            D0[i][j] * cos(phi0[i][j]), 
+                            Z0[i][j])
                 
                 # Sign the impact parameter based on the dot product with jet direction
                 # dot product in 3D
-                dot_prod = d.X() * p.X() + d.Y() * p.Y() + d.Z() * p.Z()
+                dot_prod = d.X * p.X + d.Y * p.Y + d.Z * p.Z
                 sign_val = dot_prod > 0.0 ? 1.0 : -1.0
                 impact_val = sqrt(D0[i][j]^2 + Z0[i][j]^2)
                 cprojs_val = sign_val * impact_val
@@ -1901,20 +1856,28 @@ function get_Sip3dVal_clusterV(jets::Vector{JetReconstruction.PseudoJet},
     return result
 end
 
+function get_btagSip3dVal(jets::Vector{JetReconstruction.EEJet},
+    pfcand_dxy::Vector{JetConstituentsData},
+    pfcand_dz::Vector{JetConstituentsData},
+    pfcand_phi0::Vector{JetConstituentsData},
+    Bz::Float64)
+# Simply call the implementation function
+return get_Sip3dVal_clusterV(jets, pfcand_dxy, pfcand_dz, pfcand_phi0, Bz)
+end
 """
-    get_Sip3dSig(Sip3dVals::Vector{FCCAnalysesJetConstituentsData},
-                err2_D0::Vector{FCCAnalysesJetConstituentsData},
-                err2_Z0::Vector{FCCAnalysesJetConstituentsData}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_Sip3dSig(Sip3dVals::Vector{JetConstituentsData},
+                err2_D0::Vector{JetConstituentsData},
+                err2_Z0::Vector{JetConstituentsData}) -> Vector{JetConstituentsData}
 
 Calculate the 3D signed impact parameter significance (value/error) for each particle.
 """
-function get_Sip3dSig(Sip3dVals::Vector{FCCAnalysesJetConstituentsData},
-                     err2_D0::Vector{FCCAnalysesJetConstituentsData},
-                     err2_Z0::Vector{FCCAnalysesJetConstituentsData})
-    result = Vector{FCCAnalysesJetConstituentsData}()
+function get_Sip3dSig(Sip3dVals::Vector{JetConstituentsData},
+                     err2_D0::Vector{JetConstituentsData},
+                     err2_Z0::Vector{JetConstituentsData})
+    result = Vector{JetConstituentsData}()
     
     for i in eachindex(Sip3dVals)
-        sigs = FCCAnalysesJetConstituentsData()
+        sigs = JetConstituentsData()  # Changed to initialize sigs as a JetConstituentsData
         
         for j in eachindex(Sip3dVals[i])
             if err2_D0[i][j] > 0.0
@@ -1931,51 +1894,60 @@ function get_Sip3dSig(Sip3dVals::Vector{FCCAnalysesJetConstituentsData},
     return result
 end
 
+function get_btagSip3dSig(Sip3dVals::Vector{JetConstituentsData},
+                        err2_D0::Vector{JetConstituentsData},
+                        err2_Z0::Vector{JetConstituentsData})
+    # Simply call the implementation function
+    return get_Sip3dSig(Sip3dVals, err2_D0, err2_Z0)
+end
+
 """
     get_JetDistVal_clusterV(jets::Vector{JetReconstruction.PseudoJet},
-                           jcs::Vector{FCCAnalysesJetConstituents},
-                           D0::Vector{FCCAnalysesJetConstituentsData},
-                           Z0::Vector{FCCAnalysesJetConstituentsData},
-                           phi0::Vector{FCCAnalysesJetConstituentsData},
-                           Bz::Float32) -> Vector{FCCAnalysesJetConstituentsData}
+                            jcs::Vector{JetConstituents},
+                            D0::Vector{JetConstituentsData},
+                            Z0::Vector{JetConstituentsData},
+                            phi0::Vector{JetConstituentsData},
+                            Bz::Float32) -> Vector{JetConstituentsData}
 
 Calculate the jet distance value for each particle, measuring the distance between
 the point of closest approach and the jet axis.
 """
-function get_JetDistVal_clusterV(jets::Vector{JetReconstruction.PseudoJet},
-                                jcs::Vector{FCCAnalysesJetConstituents},
-                                D0::Vector{FCCAnalysesJetConstituentsData},
-                                Z0::Vector{FCCAnalysesJetConstituentsData},
-                                phi0::Vector{FCCAnalysesJetConstituentsData},
-                                Bz::Float32)
-    result = Vector{FCCAnalysesJetConstituentsData}()
+function get_JetDistVal_clusterV(jets::Vector{JetReconstruction.EEJet},
+                                jcs::Vector{JetConstituents},
+                                D0::Vector{JetConstituentsData},
+                                Z0::Vector{JetConstituentsData},
+                                phi0::Vector{JetConstituentsData},
+                                Bz::Float64)
+    result = Vector{JetConstituentsData}()
     
     for i in eachindex(jets)
-        p_jet = TVector3(jets[i].px(), jets[i].py(), jets[i].pz())
-        tmp = FCCAnalysesJetConstituentsData()
+        # p_jet = Vector3(jets[i].px, jets[i].py, jets[i].pz)
+        p_jet = Vector3(jets[i].px, jets[i].py, jets[i].pz)
+        tmp = JetConstituentsData()
         
         for j in eachindex(D0[i])
             if D0[i][j] != -9.0 && j <= length(jcs[i])
                 # Create 3D vector of displacement at point of closest approach
-                d = TVector3(-D0[i][j] * sin(phi0[i][j]), 
-                             D0[i][j] * cos(phi0[i][j]), 
-                             Z0[i][j])
+                d = Vector3(-D0[i][j] * sin(phi0[i][j]), 
+                            D0[i][j] * cos(phi0[i][j]), 
+                            Z0[i][j])
                 
                 # Calculate particle momentum
-                p_ct = TVector3(jcs[i][j].momentum.x, 
+                p_ct = Vector3(jcs[i][j].momentum.x, 
                                 jcs[i][j].momentum.y, 
                                 jcs[i][j].momentum.z)
                 
                 # Jet origin
-                r_jet = TVector3(0.0, 0.0, 0.0)
+                r_jet = Vector3(0.0, 0.0, 0.0)
                 
                 # Normal vector to plane containing particle and jet momenta
-                n = p_ct.Cross(p_jet).Unit()
+                n = v3_unit(v3_cross(p_ct, p_jet))
+
                 
                 # Distance is projection of displacement onto normal vector
-                dist = n.X() * (d.X() - r_jet.X()) + 
-                       n.Y() * (d.Y() - r_jet.Y()) + 
-                       n.Z() * (d.Z() - r_jet.Z())
+                dist = n.X * (d.X - r_jet.X) + 
+                       n.Y * (d.Y - r_jet.Y) + 
+                       n.Z * (d.Z - r_jet.Z)
                 
                 push!(tmp, dist)
             else
@@ -1989,20 +1961,31 @@ function get_JetDistVal_clusterV(jets::Vector{JetReconstruction.PseudoJet},
     return result
 end
 
+function get_btagJetDistVal(jets::Vector{JetReconstruction.EEJet},
+                            jcs::Vector{JetConstituents},
+                            D0::Vector{JetConstituentsData},
+                            Z0::Vector{JetConstituentsData},
+                            phi0::Vector{JetConstituentsData},
+                            Bz::Float64)
+    # Simply call the implementation functio
+    return get_JetDistVal_clusterV(jets, jcs, D0, Z0, phi0, Bz)
+end
+
+
 """
-    get_JetDistSig(JetDistVal::Vector{FCCAnalysesJetConstituentsData},
-                  err2_D0::Vector{FCCAnalysesJetConstituentsData},
-                  err2_Z0::Vector{FCCAnalysesJetConstituentsData}) -> Vector{FCCAnalysesJetConstituentsData}
+    get_JetDistSig(JetDistVal::Vector{JetConstituentsData},
+                    err2_D0::Vector{JetConstituentsData},
+                    err2_Z0::Vector{JetConstituentsData}) -> Vector{JetConstituentsData}
 
 Calculate the jet distance significance (value/error) for each particle.
 """
-function get_JetDistSig(JetDistVal::Vector{FCCAnalysesJetConstituentsData},
-                       err2_D0::Vector{FCCAnalysesJetConstituentsData},
-                       err2_Z0::Vector{FCCAnalysesJetConstituentsData})
-    result = Vector{FCCAnalysesJetConstituentsData}()
+function get_JetDistSig(JetDistVal::Vector{JetConstituentsData},
+                        err2_D0::Vector{JetConstituentsData},
+                        err2_Z0::Vector{JetConstituentsData})
+    result = Vector{JetConstituentsData}()
     
     for i in eachindex(JetDistVal)
-        tmp = FCCAnalysesJetConstituentsData()
+        tmp = JetConstituentsData()
         
         for j in eachindex(JetDistVal[i])
             if err2_D0[i][j] > 0.0
@@ -2022,21 +2005,27 @@ function get_JetDistSig(JetDistVal::Vector{FCCAnalysesJetConstituentsData},
     return result
 end
 
+function get_btagJetDistSig(JetDistVal::Vector{JetConstituentsData},
+                            err2_D0::Vector{JetConstituentsData},
+                            err2_Z0::Vector{JetConstituentsData})
+    # Simply call the implementation function
+    return get_JetDistSig(JetDistVal, err2_D0, err2_Z0)
+end
 """
-    count_jets(jets::Vector{FCCAnalysesJetConstituents}) -> Int
+    count_jets(jets::Vector{JetConstituents}) -> Int
 
 Count the number of jets.
 """
-function count_jets(jets::Vector{FCCAnalysesJetConstituents})
+function count_jets(jets::Vector{JetConstituents})
     return length(jets)
 end
 
 """
-    count_consts(jets::Vector{FCCAnalysesJetConstituents}) -> Vector{Int}
+    count_consts(jets::Vector{JetConstituents}) -> Vector{Int}
 
 Count the number of constituents in each jet.
 """
-function count_consts(jets::Vector{FCCAnalysesJetConstituents})
+function count_consts(jets::Vector{JetConstituents})
     result = Vector{Int}()
     
     for i in eachindex(jets)
@@ -2047,11 +2036,11 @@ function count_consts(jets::Vector{FCCAnalysesJetConstituents})
 end
 
 """
-    count_type(isType::Vector{FCCAnalysesJetConstituentsData}) -> Vector{Int}
+    count_type(isType::Vector{JetConstituentsData}) -> Vector{Int}
 
 Count the number of particles of a specific type in each jet.
 """
-function count_type(isType::Vector{FCCAnalysesJetConstituentsData})
+function count_type(isType::Vector{JetConstituentsData})
     result = Vector{Int}()
     
     for i in eachindex(isType)
