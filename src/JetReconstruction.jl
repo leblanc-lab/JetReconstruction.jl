@@ -48,7 +48,7 @@ export RecoStrategy, JetAlgorithm
 # ClusterSequence type
 include("ClusterSequence.jl")
 export ClusterSequence, inclusive_jets, exclusive_jets, n_exclusive_jets, constituents,
-       constituent_indexes, parent_jets
+        constituent_indexes, parent_jets
 
 ## N2Plain algorithm
 # Algorithmic part for simple sequential implementation
@@ -73,7 +73,11 @@ export jet_reconstruct
 ## Substructure modules
 include("Substructure.jl")
 export MassDropTagger, SoftDropTagger, JetFilter, JetTrim, mass_drop, soft_drop,
-       jet_filtering, jet_trimming
+        jet_filtering, jet_trimming
+
+## Jet Constituents utilities
+include("JetConstituents.jl")
+export build_constituents, build_constituents_cluster, get_jet_constituents, 
 
 # Simple HepMC3 reader
 include("HepMC3.jl")

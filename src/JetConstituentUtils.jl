@@ -1,14 +1,9 @@
 module JetConstituentUtils
 
 using StaticArrays
-using LinearAlgebra
-using LorentzVectorHEP
 using EDM4hep
 using JetReconstruction
 using StructArrays: StructVector
-
-include("ReconstructedParticle.jl")
-include("ReconstructedParticle2Track.jl")
 
 # Define type aliases for clarity
 const JetConstituents = StructVector{EDM4hep.ReconstructedParticle}
@@ -1692,7 +1687,7 @@ function get_dndx(jcs::Vector{StructVector{EDM4hep.ReconstructedParticle}},
 end
 
 """
-    get_Sip2dVal_clusterV(jets::Vector{JetReconstruction.PseudoJet},
+    get_Sip2dVal_clusterV(jets::Vector{JetReconstruction.EEJet},
                         D0::Vector{JetConstituentsData},
                         phi0::Vector{JetConstituentsData},
                         Bz::Float64) -> Vector{JetConstituentsData}
@@ -1701,7 +1696,7 @@ Calculate the 2D signed impact parameter value for each particle relative to the
 This is a Julia implementation of the C++ function get_Sip2dVal_clusterV.
 
 # Arguments
-- jets: Vector of PseudoJet objects representing jets
+- jets: Vector of EEJet objects representing jets
 - D0: Vector of vectors containing D0 values (transverse impact parameters)
 - phi0: Vector of vectors containing phi0 values (azimuthal angles at impact point)
 - Bz: The magnetic field in Tesla
@@ -1745,10 +1740,10 @@ end
 
 
 """
-    get_btagSip2dVal(jets::Vector{JetReconstruction.PseudoJet},
+    get_btagSip2dVal(jets::Vector{JetReconstruction.EEJet},
                     pfcand_dxy::Vector{JetConstituentsData},
                     pfcand_phi0::Vector{JetConstituentsData},
-                    Bz::Float32) -> Vector{JetConstituentsData}
+                    Bz::Float64) -> Vector{JetConstituentsData}
 
 Call the implementation function get_Sip2dVal_clusterV
 """
@@ -1813,11 +1808,11 @@ function get_btagSip2dSig(pfcand_btagSip2dVal::Vector{JetConstituentsData},
 end
 
 """
-    get_Sip3dVal_clusterV(jets::Vector{JetReconstruction.PseudoJet},
+    get_Sip3dVal_clusterV(jets::Vector{JetReconstruction.EEJet},
                         D0::Vector{JetConstituentsData},
                         Z0::Vector{JetConstituentsData},
                         phi0::Vector{JetConstituentsData},
-                        Bz::Float32) -> Vector{JetConstituentsData}
+                        Bz::Float64) -> Vector{JetConstituentsData}
 
 Calculate the 3D signed impact parameter value for each particle relative to the jet axis.
 """
@@ -1902,7 +1897,7 @@ function get_btagSip3dSig(Sip3dVals::Vector{JetConstituentsData},
 end
 
 """
-    get_JetDistVal_clusterV(jets::Vector{JetReconstruction.PseudoJet},
+    get_JetDistVal_clusterV(jets::Vector{JetReconstruction.EEJet},
                             jcs::Vector{JetConstituents},
                             D0::Vector{JetConstituentsData},
                             Z0::Vector{JetConstituentsData},
